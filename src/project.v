@@ -16,7 +16,7 @@ module tt_audioplayback (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-
+localparam LINE_SIZE = 16;
 // bidir pinouts
 //    uio_in            | uio_out
 // [7] - start_prog     | [7] - audio_out
@@ -28,14 +28,50 @@ module tt_audioplayback (
 // [1] - SD0            | [1] - SD0
 // [0] - unused         | [0] - CS
 
+// ui_in
+// [1] playback_speed
+// [0] playback_speed
+
   wire pwm_out;
 
-  // All output pins must be assigned. If not used, assign to 0.
-  assign uo_out  = ui_in + uio_in;  // Example: ou_out is the sum of ui_in and uio_in
-  assign uio_out = 0;
-  assign uio_oe  = 0;
+  wire [3:0] qspi_din   = {uio_in[5],   uio_in[4],  uio_in[2], uio_in[1]};
+  wire [3:0] qspi_dout  = {uio_out[5], uio_out[4], uio_out[2], uio_out[1]};
 
-  assign uo_out[7] = pwm_out;
+  wire [23:0] addr;
+  wire        rd;
+  wire        done;
+  wire [(LINE_SIZE*8)-1:0]  line;
+  wire [7:0]  sample;
+
+  wire        qspi_sck;
+  wire        qspi_ce_n;
+  wire        qspi_douten;
+
+  // QSPI Output Assignments
+  assign uio_out[0] = qspi_ce_n;
+  assign uio_out[1] = qspi_dout[0];
+  assign uio_out[2] = qspi_dout[1];
+  assign uio_out[3] = qspi_sck;
+  assign uio_out[4] = qspi_dout[2];
+  assign uio_out[5] = qspi_dout[3];
+  assign uio_out[6] = 1'b0;
+  // assign uio_out[7] is not set here, it's used for something else?
+  // Comment says [7] - audio_out. Let's check uo_out[7] vs uio_out[7].
+  // line 47: assign uo_out[7] = pwm_out;
+  // line 22: // [7] - start_prog | [7] - audio_out
+  
+  // QSPI Output Enable Assignments
+  assign uio_oe[0] = 1'b1; // CS is output
+  assign uio_oe[1] = qspi_douten;
+  assign uio_oe[2] = qspi_douten;
+  assign uio_oe[3] = 1'b1; // SCK is output
+  assign uio_oe[4] = qspi_douten;
+  assign uio_oe[5] = qspi_douten;
+  assign uio_oe[6] = 1'b0;
+  assign uio_oe[7] = 1'b0;
+
+  // All other output pins assigned to 0 (overriding line 43-45)
+  assign uo_out[6:0] = 7'b0;
 
   pwm u_pwm (
     .clk            (clk),
@@ -44,6 +80,43 @@ module tt_audioplayback (
     .pwm_o          (pwm_out)
   );
 
+  playback_ctrl 
+  #(
+    .LINE_SIZE(LINE_SIZE)
+  ) u_playback (
+    .clk            (clk),
+    .rst_n          (rst_n),
+    .data_i         (line),
+    .rd_en_i        (done),
+
+    .addr_o         (addr),
+    .rd_o           (rd),
+    .sample_o       (sample)
+
+  );
+
+  EF_QSPI_XIP_CTRL 
+  #(
+      .NUM_LINES      ( 1  ), 
+      .LINE_SIZE      ( LINE_SIZE ), 
+      .RESET_CYCLES   ( 999 ) 
+  )
+  u_EF_QSPI_XIP_CTRL
+  (
+
+    .clk     (clk),
+    .rst_n   (rst_n),
+    .addr    (addr),
+    .rd      (rd),
+    .done    (done),
+    .line    (line), /* 8-bit PCM data of NUM_LINES size */
+    // External Interface to Quad I/O
+    .sck     ( qspi_sck    ),
+    .ce_n    ( qspi_ce_n   ),
+    .din     ( qspi_din    ),
+    .dout    ( qspi_dout   ),
+    .douten  ( qspi_douten )
+);
 
 
   // List all unused inputs to prevent warnings
