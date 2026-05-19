@@ -35,7 +35,7 @@ localparam LINE_SIZE = 16;
   wire pwm_out;
 
   wire [3:0] qspi_din   = {uio_in[5],   uio_in[4],  uio_in[2], uio_in[1]};
-  wire [3:0] qspi_dout  = {uio_out[5], uio_out[4], uio_out[2], uio_out[1]};
+  wire [3:0] qspi_dout;
 
   wire [23:0] addr;
   wire        rd;
@@ -80,6 +80,8 @@ localparam LINE_SIZE = 16;
     .pwm_o          (pwm_out)
   );
 
+  wire done_w_sck = done & qspi_sck;
+
   playback_ctrl 
   #(
     .LINE_SIZE(LINE_SIZE)
@@ -87,7 +89,7 @@ localparam LINE_SIZE = 16;
     .clk            (clk),
     .rst_n          (rst_n),
     .data_i         (line),
-    .rd_en_i        (done),
+    .rd_en_i        (done_w_sck),
 
     .addr_o         (addr),
     .rd_o           (rd),
@@ -120,6 +122,6 @@ localparam LINE_SIZE = 16;
 
 
   // List all unused inputs to prevent warnings
-  wire _unused = &{ena, clk, rst_n, 1'b0};
+  wire _unused = &{ena, 1'b0};
 
 endmodule

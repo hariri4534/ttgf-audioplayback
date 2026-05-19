@@ -1,40 +1,151 @@
-# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
-# SPDX-License-Identifier: Apache-2.0
-
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, Timer
+import logging
+
+class QSPIFlash:
+    """
+    Simulates a QSPI Flash memory (e.g., W25Qxx series) as expected by the EF_QSPI_XIP_CTRL.
+    Supports:
+    - 0x66/0x99 Reset sequence (1-bit mode)
+    - 0xEB Fast Read Quad I/O (1-4-4 mode)
+    """
+    def __init__(self, dut, memory=None):
+        self.dut = dut
+        self.memory = memory if memory is not None else {}
+        self.log = logging.getLogger("cocotb.flash")
+        self.log.setLevel(logging.INFO)
+        
+        # Using wires exposed in tb.v for reliable triggering in Icarus
+        self.cs_n = dut.qspi_cs_n
+        self.sck  = dut.qspi_sck
+        self.sd0  = dut.qspi_sd0
+        self.sd1  = dut.qspi_sd1
+        self.sd2  = dut.qspi_sd2
+        self.sd3  = dut.qspi_sd3
+        self.douten = dut.qspi_douten
+
+    async def run(self):
+        self.log.info("QSPI Flash simulation started")
+        while True:
+            # 1. Wait for CS# to fall
+            await FallingEdge(self.cs_n)
+            self.log.debug("Flash: CS# Low")
+            
+            # 2. Capture Command (8 bits on SD0)
+            cmd = 0
+            for i in range(8):
+                await RisingEdge(self.sck)
+                cmd = (cmd << 1) | self.sd0.value.integer
+            
+            self.log.info(f"Flash: Command 0x{cmd:02X} received")
+            
+            if cmd == 0xEB:  # Fast Read Quad I/O
+                # Address (24 bits, 6 cycles, 4 bits per cycle)
+                addr = 0
+                for _ in range(6):
+                    await RisingEdge(self.sck)
+                    addr = (addr << 4) | self._get_nibble()
+                self.log.info(f"Flash: Address 0x{addr:06X} received")
+                
+                while self.douten.value == 1:
+                    self.log.info(f"Waiting for douten to go low")
+                    await RisingEdge(self.sck)
+
+                self.log.info(f"Data transmission start...")
+                assert self.douten.value == 0
+                # Data transmission (2 cycles per byte)
+                first_time = 1
+                while self.cs_n.value == 0:
+                    byte = self.memory.get(addr, 0x00)
+                    
+                    # High nibble
+                    if not first_time:
+                        await FallingEdge(self.sck)
+                    self._set_nibble(byte >> 4)
+                    if not first_time:
+                        await RisingEdge(self.sck)
+                    
+                    # Low nibble
+                    # await FallingEdge(self.sck)
+                    self._set_nibble(byte & 0x0F)
+                    # await RisingEdge(self.sck)
+                    
+                    addr += 1
+                    # Break if CS# goes high during byte transmission
+                    if self.cs_n.value == 1:
+                        break
+                    first_time = 0
+            
+            elif cmd == 0x66:
+                self.log.info("Flash: Reset Enable received")
+            elif cmd == 0x99:
+                self.log.info("Flash: Reset command received")
+            else:
+                self.log.warning(f"Flash: Unknown command 0x{cmd:02X}")
+            
+            # 3. Wait for CS# to rise
+            if self.cs_n.value == 0:
+                await RisingEdge(self.cs_n)
+            self.log.debug("Flash: CS# High")
+            self._set_nibble(0, drive=False)
+
+    def _get_nibble(self):
+        nibble = 0
+        if self.sd0.value.integer: nibble |= 0x1
+        if self.sd1.value.integer: nibble |= 0x2
+        if self.sd2.value.integer: nibble |= 0x4
+        if self.sd3.value.integer: nibble |= 0x8
+        return nibble
+
+    def _set_nibble(self, nibble, drive=True):
+        current = self.dut.uio_in.value
+        mask = (1 << 1) | (1 << 2) | (1 << 4) | (1 << 5)
+        if not drive:
+            self.dut.uio_in.value = current & ~mask
+            return
+            
+        new_bits = 0
+        if nibble & 0x1: new_bits |= (1 << 1)
+        if nibble & 0x2: new_bits |= (1 << 2)
+        if nibble & 0x4: new_bits |= (1 << 4)
+        if nibble & 0x8: new_bits |= (1 << 5)
+        self.dut.uio_in.value = (current & ~mask) | new_bits
 
 
 @cocotb.test()
-async def test_project(dut):
-    dut._log.info("Start")
+async def test_qspi(dut):
+    dut._log.info("Start QSPI Simulation Test")
 
-    # Set the clock period to 10 us (100 KHz)
-    clock = Clock(dut.clk, 10, unit="us")
+    # 50 MHz clock
+    clock = Clock(dut.clk, 20, units="ns")
     cocotb.start_soon(clock.start())
 
-    # Reset
-    dut._log.info("Reset")
+    # Pre-fill memory with some audio-like pattern (sawtooth)
+    mem = {i: (i % 256) for i in range(1,1024)}
+    flash = QSPIFlash(dut, mem)
+    cocotb.start_soon(flash.run())
+
+    # Initialize inputs
     dut.ena.value = 1
     dut.ui_in.value = 0
     dut.uio_in.value = 0
     dut.rst_n.value = 0
+
+    # Reset duration
     await ClockCycles(dut.clk, 10)
     dut.rst_n.value = 1
+    dut._log.info("Reset released")
 
-    dut._log.info("Test project behavior")
+    # Wait for the initial QSPI Reset sequence (0x66, 0x99) and the first read.
+    # EF_QSPI_XIP_CTRL.v has RESET_CYCLES=999, which takes about 2000 clock cycles.
+    await ClockCycles(dut.clk, 2500)
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
-
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
-
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
-
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+    # Check if we are getting data. 
+    # The playback_ctrl should be outputting samples to uo_out[7] (via PWM)
+    # and we can check the internal signals if needed.
+    
+    # Let's wait a bit more to see multiple line reads
+    await ClockCycles(dut.clk, 100)
+    
+    dut._log.info("Finished QSPI Simulation Test")

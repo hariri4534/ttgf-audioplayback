@@ -8,7 +8,7 @@ module tb ();
 
   // Dump the signals to a FST file. You can view it with gtkwave or surfer.
   initial begin
-    $dumpfile("tb.fst");
+    $dumpfile("tb.vcd");
     $dumpvars(0, tb);
     #1;
   end
@@ -22,6 +22,16 @@ module tb ();
   wire [7:0] uo_out;
   wire [7:0] uio_out;
   wire [7:0] uio_oe;
+
+  // QSPI signals for easier cocotb access
+  wire qspi_cs_n = uio_out[0];
+  wire qspi_sck  = uio_out[3];
+  wire qspi_sd0  = uio_out[1];
+  wire qspi_sd1  = uio_out[2];
+  wire qspi_sd2  = uio_out[4];
+  wire qspi_sd3  = uio_out[5];
+  wire qspi_douten = uio_oe[1];
+
 `ifdef GL_TEST
   wire VPWR = 1'b1;
   wire VGND = 1'b0;

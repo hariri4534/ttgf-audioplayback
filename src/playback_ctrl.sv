@@ -24,9 +24,20 @@ logic [$clog2(LINE_SIZE)-1:0] sample_ptr_q;
 logic [$clog2(LINE_SIZE)-1:0] sample_ptr_nxt;
 logic [7:0] pwm_data;
 logic next_sample;
-logic rd_q;
+logic gen_read_req;
+logic rd_req_q, rd_req_nxt;
+logic rd_req_pulse_q, rd_req_pulse_next;
+logic start_count_q;
 
-always_ff @( posedge clk ) if (rd_en_i) data_buf_q <= data_i;
+always_ff @( posedge clk ) begin
+    if (~rst_n) begin
+        data_buf_q <= '0;
+        start_count_q <= '0;
+    end else if (rd_en_i) begin
+        data_buf_q <= data_i;
+        start_count_q <= '1;
+    end
+end
 
 
 // audio playback management
@@ -35,7 +46,7 @@ always_ff @(posedge clk) begin
     if (~rst_n) begin
         count_q <= '0;
         sample_ptr_q <= '0;
-    end else begin
+    end else if (start_count_q) begin
         count_q <= count_nxt;
         sample_ptr_q <= sample_ptr_nxt;
     end
@@ -46,6 +57,8 @@ assign count_nxt        = next_sample ? '0 : count_q + 1'b1;
 // TODO: Adjust playback by adjusting increment
 assign sample_ptr_nxt   = next_sample ? sample_ptr_q + 1'b1
                                       : sample_ptr_q;
+
+assign gen_read_req = &sample_ptr_q & ~|count_q;
 
 
 // Binary coded mux to select sample data for PWM
@@ -65,11 +78,14 @@ end
 
 always_ff @(posedge clk) begin
     if (~rst_n) begin
-        rd_q        <= '0;
+        rd_req_q    <= '1;
         addr_q      <= '0;
-    end
-        rd_q        <= rd_en_i;
+        rd_req_pulse_q  <= '0;
+    end else begin
+        rd_req_q    <= rd_en_i & gen_read_req;
         addr_q      <= addr_nxt;
+        rd_req_pulse_q <= rd_req_q & ~rd_req_pulse_q;
+    end
 end
 
 assign addr_offset[$clog2(LINE_SIZE)-1]     = 1'b1;
@@ -79,7 +95,7 @@ assign addr_nxt = rd_en_i ? addr_q + { {ADDR_PAD{1'b0}}, addr_offset }
 
 // TODO: Change the rd_o signal, need few consideration on how to assert read request
 
-assign rd_o     = rd_q;
+assign rd_o     = rd_req_pulse_q;
 assign addr_o   = addr_q;
 assign sample_o = pwm_data;
 
