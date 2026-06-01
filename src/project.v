@@ -20,7 +20,7 @@ localparam LINE_SIZE = 16;
 // bidir pinouts
 //    uio_in            | uio_out
 // [7] - start_prog     | [7] - audio_out
-// [6] - end_prog       | [6] - unused
+// [6] - end_prog       | [6] - VAL:rd_req
 // [5] - SD3            | [5] - SD3
 // [4] - SD2            | [4] - SD2
 // [3] - unused         | [3] - SCK
@@ -46,6 +46,7 @@ localparam LINE_SIZE = 16;
   wire        qspi_sck;
   wire        qspi_ce_n;
   wire        qspi_douten;
+  wire        done_w_sck;
 
   // QSPI Output Assignments
   assign uio_out[0] = qspi_ce_n;
@@ -54,7 +55,11 @@ localparam LINE_SIZE = 16;
   assign uio_out[3] = qspi_sck;
   assign uio_out[4] = qspi_dout[2];
   assign uio_out[5] = qspi_dout[3];
+`ifdef VAL
+  assign uio_out[6] = done_w_sck;
+`else
   assign uio_out[6] = 1'b0;
+`endif
   // assign uio_out[7] is not set here, it's used for something else?
   // Comment says [7] - audio_out. Let's check uo_out[7] vs uio_out[7].
   // line 47: assign uo_out[7] = pwm_out;
@@ -80,7 +85,7 @@ localparam LINE_SIZE = 16;
     .pwm_o          (pwm_out)
   );
 
-  wire done_w_sck = done & qspi_sck;
+  assign done_w_sck = done & qspi_sck;
 
   playback_ctrl 
   #(

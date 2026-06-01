@@ -31,6 +31,9 @@ module tb ();
   wire qspi_sd2  = uio_out[4];
   wire qspi_sd3  = uio_out[5];
   wire qspi_douten = uio_oe[1];
+`ifdef VAL
+  wire done    = uio_out[6];
+`endif
 
 `ifdef GL_TEST
   wire VPWR = 1'b1;

@@ -1,6 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, Timer
+from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, ReadOnly
 import logging
 
 class QSPIFlash:
@@ -12,6 +12,7 @@ class QSPIFlash:
     """
     def __init__(self, dut, memory=None):
         self.dut = dut
+        self.line_size = 16
         self.memory = memory if memory is not None else {}
         self.log = logging.getLogger("cocotb.flash")
         self.log.setLevel(logging.INFO)
@@ -24,6 +25,10 @@ class QSPIFlash:
         self.sd2  = dut.qspi_sd2
         self.sd3  = dut.qspi_sd3
         self.douten = dut.qspi_douten
+        self.done = dut.done
+
+        self.addr = 0
+
 
     async def run(self):
         self.log.info("QSPI Flash simulation started")
@@ -42,48 +47,39 @@ class QSPIFlash:
             
             if cmd == 0xEB:  # Fast Read Quad I/O
                 # Address (24 bits, 6 cycles, 4 bits per cycle)
-                addr = 0
                 for _ in range(6):
                     await RisingEdge(self.sck)
-                    addr = (addr << 4) | self._get_nibble()
-                self.log.info(f"Flash: Address 0x{addr:06X} received")
+                    self.addr = (self.addr << 4) | self._get_nibble()
+                self.log.info(f"Flash: Address 0x{self.addr:06X} received")
                 
-                while self.douten.value == 1:
-                    self.log.info(f"Waiting for douten to go low")
-                    await RisingEdge(self.sck)
+                await ClockCycles(self.sck, 6)
 
                 self.log.info(f"Data transmission start...")
-                assert self.douten.value == 0
                 # Data transmission (2 cycles per byte)
-                first_time = 1
-                while self.cs_n.value == 0:
-                    byte = self.memory.get(addr, 0x00)
-                    
+                for i in range(self.line_size):
+                    byte = self.memory.get(self.addr, 0x00)
+                    self.log.info(f"Flash: Byte 0x{byte:06X} received, Addr = {self.addr}")
+
                     # High nibble
-                    if not first_time:
-                        await FallingEdge(self.sck)
+                    await FallingEdge(self.sck)
                     self._set_nibble(byte >> 4)
-                    if not first_time:
-                        await RisingEdge(self.sck)
-                    
-                    # Low nibble
-                    # await FallingEdge(self.sck)
+                    await FallingEdge(self.sck)
                     self._set_nibble(byte & 0x0F)
-                    # await RisingEdge(self.sck)
+
                     
-                    addr += 1
-                    # Break if CS# goes high during byte transmission
-                    if self.cs_n.value == 1:
-                        break
-                    first_time = 0
-            
+                    self.addr += 1
+
+                await ReadOnly()
+                self.log.info(f"Flash: SPI controller says done = {self.done.value}")
+
+
             elif cmd == 0x66:
                 self.log.info("Flash: Reset Enable received")
             elif cmd == 0x99:
                 self.log.info("Flash: Reset command received")
             else:
                 self.log.warning(f"Flash: Unknown command 0x{cmd:02X}")
-            
+
             # 3. Wait for CS# to rise
             if self.cs_n.value == 0:
                 await RisingEdge(self.cs_n)
@@ -146,6 +142,6 @@ async def test_qspi(dut):
     # and we can check the internal signals if needed.
     
     # Let's wait a bit more to see multiple line reads
-    await ClockCycles(dut.clk, 100)
+    await ClockCycles(dut.clk, 50*100)
     
     dut._log.info("Finished QSPI Simulation Test")

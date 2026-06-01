@@ -28,12 +28,21 @@ logic gen_read_req;
 logic rd_req_q, rd_req_nxt;
 logic rd_req_pulse_q, rd_req_pulse_next;
 logic start_count_q;
+logic rd_en_q;
+
+always_ff @(posedge clk) begin
+    if (~rst_n) begin
+        rd_en_q <= '0;
+    end else begin
+        rd_en_q <= rd_en_i;
+    end
+end
 
 always_ff @( posedge clk ) begin
     if (~rst_n) begin
         data_buf_q <= '0;
         start_count_q <= '0;
-    end else if (rd_en_i) begin
+    end else if (rd_en_q) begin
         data_buf_q <= data_i;
         start_count_q <= '1;
     end
@@ -62,19 +71,36 @@ assign gen_read_req = &sample_ptr_q & ~|count_q;
 
 
 // Binary coded mux to select sample data for PWM
-genvar i;
-logic [7:0] pwm_data_gen [LINE_SIZE-1:0];
-generate
-    for (i=0; i < LINE_SIZE; i++) begin
-        assign pwm_data_gen [i] = {8{(sample_ptr_q == i)}} & data_buf_q[i*8 +: 8];
-    end
-endgenerate
 
-always_comb begin
-    for (int i=0; i < LINE_SIZE; i++) begin
-        pwm_data = pwm_data | pwm_data_gen[i];
-    end
-end
+// genvar i;
+// logic [7:0] pwm_data_gen [LINE_SIZE-1:0];
+// generate
+//     for (i=0; i < LINE_SIZE; i++) begin
+//         assign pwm_data_gen [i] = {8{(sample_ptr_q == i)}} & data_buf_q[i*8 +: 8];
+//     end
+// endgenerate
+
+// always_comb begin
+//     for (int i=0; i < LINE_SIZE; i++) begin
+//         pwm_data = pwm_data | pwm_data_gen[i];
+//     end
+// end
+assign pwm_data = {8{sample_ptr_q == 4'd0}}  & data_buf_q[0   +: 8]
+                | {8{sample_ptr_q == 4'd1}}  & data_buf_q[8   +: 8]
+                | {8{sample_ptr_q == 4'd2}}  & data_buf_q[16  +: 8]
+                | {8{sample_ptr_q == 4'd3}}  & data_buf_q[24  +: 8]
+                | {8{sample_ptr_q == 4'd4}}  & data_buf_q[32  +: 8]
+                | {8{sample_ptr_q == 4'd5}}  & data_buf_q[40  +: 8]
+                | {8{sample_ptr_q == 4'd6}}  & data_buf_q[48  +: 8]
+                | {8{sample_ptr_q == 4'd7}}  & data_buf_q[56  +: 8]
+                | {8{sample_ptr_q == 4'd8}}  & data_buf_q[64  +: 8]
+                | {8{sample_ptr_q == 4'd9}}  & data_buf_q[72  +: 8]
+                | {8{sample_ptr_q == 4'd10}} & data_buf_q[80  +: 8]
+                | {8{sample_ptr_q == 4'd11}} & data_buf_q[88  +: 8]
+                | {8{sample_ptr_q == 4'd12}} & data_buf_q[96  +: 8]
+                | {8{sample_ptr_q == 4'd13}} & data_buf_q[104 +: 8]
+                | {8{sample_ptr_q == 4'd14}} & data_buf_q[112 +: 8]
+                | {8{sample_ptr_q == 4'd15}} & data_buf_q[120 +: 8];
 
 always_ff @(posedge clk) begin
     if (~rst_n) begin
@@ -82,7 +108,7 @@ always_ff @(posedge clk) begin
         addr_q      <= '0;
         rd_req_pulse_q  <= '0;
     end else begin
-        rd_req_q    <= rd_en_i & gen_read_req;
+        rd_req_q    <= rd_en_q & gen_read_req;
         addr_q      <= addr_nxt;
         rd_req_pulse_q <= rd_req_q & ~rd_req_pulse_q;
     end
@@ -90,7 +116,7 @@ end
 
 assign addr_offset[$clog2(LINE_SIZE)-1]     = 1'b1;
 assign addr_offset[$clog2(LINE_SIZE)-2:0]   = '0;
-assign addr_nxt = rd_en_i ? addr_q + { {ADDR_PAD{1'b0}}, addr_offset }
+assign addr_nxt = rd_en_q ? addr_q + { {ADDR_PAD{1'b0}}, addr_offset }
                           : addr_q;
 
 // TODO: Change the rd_o signal, need few consideration on how to assert read request
@@ -98,7 +124,6 @@ assign addr_nxt = rd_en_i ? addr_q + { {ADDR_PAD{1'b0}}, addr_offset }
 assign rd_o     = rd_req_pulse_q;
 assign addr_o   = addr_q;
 assign sample_o = pwm_data;
-
 
 
 endmodule
