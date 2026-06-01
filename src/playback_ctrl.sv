@@ -72,35 +72,35 @@ assign gen_read_req = &sample_ptr_q & ~|count_q;
 
 // Binary coded mux to select sample data for PWM
 
-// genvar i;
-// logic [7:0] pwm_data_gen [LINE_SIZE-1:0];
-// generate
-//     for (i=0; i < LINE_SIZE; i++) begin
-//         assign pwm_data_gen [i] = {8{(sample_ptr_q == i)}} & data_buf_q[i*8 +: 8];
-//     end
-// endgenerate
+genvar i;
+logic [7:0] pwm_data_gen [LINE_SIZE-1:0];
+generate
+    for (i=0; i < LINE_SIZE; i++) begin
+        assign pwm_data_gen [i] = {8{(sample_ptr_q == i)}} & data_buf_q[i*8 +: 8];
+    end
+endgenerate
 
-// always_comb begin
-//     for (int i=0; i < LINE_SIZE; i++) begin
-//         pwm_data = pwm_data | pwm_data_gen[i];
-//     end
-// end
-assign pwm_data = {8{sample_ptr_q == 4'd0}}  & data_buf_q[0   +: 8]
-                | {8{sample_ptr_q == 4'd1}}  & data_buf_q[8   +: 8]
-                | {8{sample_ptr_q == 4'd2}}  & data_buf_q[16  +: 8]
-                | {8{sample_ptr_q == 4'd3}}  & data_buf_q[24  +: 8]
-                | {8{sample_ptr_q == 4'd4}}  & data_buf_q[32  +: 8]
-                | {8{sample_ptr_q == 4'd5}}  & data_buf_q[40  +: 8]
-                | {8{sample_ptr_q == 4'd6}}  & data_buf_q[48  +: 8]
-                | {8{sample_ptr_q == 4'd7}}  & data_buf_q[56  +: 8]
-                | {8{sample_ptr_q == 4'd8}}  & data_buf_q[64  +: 8]
-                | {8{sample_ptr_q == 4'd9}}  & data_buf_q[72  +: 8]
-                | {8{sample_ptr_q == 4'd10}} & data_buf_q[80  +: 8]
-                | {8{sample_ptr_q == 4'd11}} & data_buf_q[88  +: 8]
-                | {8{sample_ptr_q == 4'd12}} & data_buf_q[96  +: 8]
-                | {8{sample_ptr_q == 4'd13}} & data_buf_q[104 +: 8]
-                | {8{sample_ptr_q == 4'd14}} & data_buf_q[112 +: 8]
-                | {8{sample_ptr_q == 4'd15}} & data_buf_q[120 +: 8];
+always_comb begin
+    for (int i=0; i < LINE_SIZE; i++) begin
+        pwm_data = pwm_data | pwm_data_gen[i];
+    end
+end
+// assign pwm_data = {8{sample_ptr_q == 4'd0}}  & data_buf_q[0   +: 8]
+//                 | {8{sample_ptr_q == 4'd1}}  & data_buf_q[8   +: 8]
+//                 | {8{sample_ptr_q == 4'd2}}  & data_buf_q[16  +: 8]
+//                 | {8{sample_ptr_q == 4'd3}}  & data_buf_q[24  +: 8]
+//                 | {8{sample_ptr_q == 4'd4}}  & data_buf_q[32  +: 8]
+//                 | {8{sample_ptr_q == 4'd5}}  & data_buf_q[40  +: 8]
+//                 | {8{sample_ptr_q == 4'd6}}  & data_buf_q[48  +: 8]
+//                 | {8{sample_ptr_q == 4'd7}}  & data_buf_q[56  +: 8]
+//                 | {8{sample_ptr_q == 4'd8}}  & data_buf_q[64  +: 8]
+//                 | {8{sample_ptr_q == 4'd9}}  & data_buf_q[72  +: 8]
+//                 | {8{sample_ptr_q == 4'd10}} & data_buf_q[80  +: 8]
+//                 | {8{sample_ptr_q == 4'd11}} & data_buf_q[88  +: 8]
+//                 | {8{sample_ptr_q == 4'd12}} & data_buf_q[96  +: 8]
+//                 | {8{sample_ptr_q == 4'd13}} & data_buf_q[104 +: 8]
+//                 | {8{sample_ptr_q == 4'd14}} & data_buf_q[112 +: 8]
+//                 | {8{sample_ptr_q == 4'd15}} & data_buf_q[120 +: 8];
 
 always_ff @(posedge clk) begin
     if (~rst_n) begin
