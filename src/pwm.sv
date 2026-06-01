@@ -8,6 +8,7 @@ module pwm (
     input wire logic rst_n,
 
     input wire logic [7:0] sample_i,
+    input wire logic sample_valid_i,
 
     output wire logic pwm_o
 );
@@ -20,13 +21,15 @@ module pwm (
     if (!rst_n) begin
       count_q <= '0;
       pwm_q   <= '0;
-    end else begin
+    end else if (sample_valid_i) begin
       count_q <= count_d;
       pwm_q   <= pwm_d;
     end    
   end
 
-    assign count_d = (count_q == 8'hfe) ? {8{1'b0}} : count_q + 1'b1;
-    assign pwm_d   = (count_q < sample_i);
+  assign count_d = (count_q == 8'hfe) ? {8{1'b0}} : count_q + 1'b1;
+  assign pwm_d   = (count_q < sample_i);
+
+  assign pwm_o = pwm_q;
 
 endmodule

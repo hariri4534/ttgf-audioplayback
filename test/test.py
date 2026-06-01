@@ -35,7 +35,7 @@ class QSPIFlash:
         while True:
             # 1. Wait for CS# to fall
             await FallingEdge(self.cs_n)
-            self.log.debug("Flash: CS# Low")
+            self.log.info("Flash: CS# Low")
             
             # 2. Capture Command (8 bits on SD0)
             cmd = 0
@@ -78,12 +78,12 @@ class QSPIFlash:
             elif cmd == 0x99:
                 self.log.info("Flash: Reset command received")
             else:
-                self.log.warning(f"Flash: Unknown command 0x{cmd:02X}")
+                self.log.error(f"Flash: Unknown command 0x{cmd:02X}")
 
             # 3. Wait for CS# to rise
             if self.cs_n.value == 0:
                 await RisingEdge(self.cs_n)
-            self.log.debug("Flash: CS# High")
+            self.log.info("Flash: CS# High")
             self._set_nibble(0, drive=False)
 
     def _get_nibble(self):
@@ -109,9 +109,27 @@ class QSPIFlash:
         self.dut.uio_in.value = (current & ~mask) | new_bits
 
 
+async def assert_gen_read_req_to_rd_o(dut):
+    if not hasattr(dut, "user_project") or not hasattr(dut.user_project, "u_playback"):
+        dut._log.warning("Internal signal u_playback not found, skipping assertion check")
+        return
+    playback = dut.user_project.u_playback
+    while True:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if dut.rst_n.value == 1 and playback.gen_read_req.value == 1:
+            await RisingEdge(dut.clk)
+            await RisingEdge(dut.clk)
+            await ReadOnly()
+            if dut.rst_n.value == 1:
+                assert playback.rd_o.value == 1, f"Assertion failed: rd_o is {playback.rd_o.value} (expected 1) in the cycle after gen_read_req was high"
+
 @cocotb.test()
 async def test_qspi(dut):
     dut._log.info("Start QSPI Simulation Test")
+
+    # Start assertion checker
+    cocotb.start_soon(assert_gen_read_req_to_rd_o(dut))
 
     # 50 MHz clock
     clock = Clock(dut.clk, 20, units="ns")

@@ -33,6 +33,7 @@ localparam LINE_SIZE = 16;
 // [0] playback_speed
 
   wire pwm_out;
+  wire sample_valid;
 
   wire [3:0] qspi_din   = {uio_in[5],   uio_in[4],  uio_in[2], uio_in[1]};
   wire [3:0] qspi_dout;
@@ -60,6 +61,7 @@ localparam LINE_SIZE = 16;
 `else
   assign uio_out[6] = 1'b0;
 `endif
+  assign uio_out[7]   = pwm_out;
   // assign uio_out[7] is not set here, it's used for something else?
   // Comment says [7] - audio_out. Let's check uo_out[7] vs uio_out[7].
   // line 47: assign uo_out[7] = pwm_out;
@@ -73,15 +75,17 @@ localparam LINE_SIZE = 16;
   assign uio_oe[4] = qspi_douten;
   assign uio_oe[5] = qspi_douten;
   assign uio_oe[6] = 1'b0;
-  assign uio_oe[7] = 1'b0;
+  assign uio_oe[7] = 1'b1;
 
   // All other output pins assigned to 0 (overriding line 43-45)
   assign uo_out[6:0] = 7'b0;
+  assign uo_out[7]   = pwm_out;
 
   pwm u_pwm (
     .clk            (clk),
     .rst_n          (rst_n),
     .sample_i       (sample),
+    .sample_valid_i (sample_valid),
     .pwm_o          (pwm_out)
   );
 
@@ -96,6 +100,7 @@ localparam LINE_SIZE = 16;
     .data_i         (line),
     .rd_en_i        (done_w_sck),
 
+    .sample_valid_o (sample_valid),
     .addr_o         (addr),
     .rd_o           (rd),
     .sample_o       (sample)
