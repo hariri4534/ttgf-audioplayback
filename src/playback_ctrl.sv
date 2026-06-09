@@ -7,6 +7,7 @@ module playback_ctrl #(parameter LINE_SIZE=16) (
     // Interface to QSPI Controller
     input  wire [(LINE_SIZE*8)-1:0]  data_i,    // Data from Flash (assuming LINE_SIZE=1)
     input  wire        rd_en_i,   // 'done' signal from QSPI
+    input  wire [1:0]  speed_ctl_i, 
     output reg  [23:0] addr_o,    // Current read address
     output reg         rd_o,      // Trigger a new read
 
@@ -19,6 +20,9 @@ localparam ADDR_PAD = 24 - $clog2(LINE_SIZE);
 logic [LINE_SIZE*8-1:0] data_buf_q;
 logic [$clog2(LINE_SIZE)-1:0] addr_offset;
 
+logic [1:0] speed_ctl_q;
+logic [2:0] sample_ptr_increment;
+logic sample_toggle_q;
 logic [23:0] addr_q, addr_nxt;
 logic [7:0] count_q, count_nxt;
 logic [$clog2(LINE_SIZE)-1:0] sample_ptr_q;
@@ -49,6 +53,18 @@ always_ff @( posedge clk ) begin
     end
 end
 
+// Speed control
+// 00 | 0.5x speed  (same sample played twice)
+// 01 | 1x   speed  (sample move as normal)
+// 10 | 1.5  speed  (move by 1 sample, followed by 2 sample)
+// 11 | 2x   speed  (skip every other sample)
+always_ff @( posedge clk ) begin
+    if (~rst_n) begin
+        speed_ctl_q <= '0;
+    end else if (rd_en_q) begin
+        speed_ctl_q <= speed_ctl_i;
+    end
+end 
 
 // audio playback management
 // count up to 255 cycles
@@ -62,13 +78,37 @@ always_ff @(posedge clk) begin
     end
 end
 
+always_ff @(posedge clk) begin
+    if (~rst_n) begin
+        sample_toggle_q <= '0;
+    end else if (next_sample) begin
+        sample_toggle_q <= ~sample_toggle_q;
+    end
+end
+
 assign next_sample      = (count_q == 8'hfe);
 assign count_nxt        = next_sample ? '0 : count_q + 1'b1;
-// TODO: Adjust playback by adjusting increment
-assign sample_ptr_nxt   = next_sample ? sample_ptr_q + 1'b1
+
+always_comb begin
+    casez ({speed_ctl_q, sample_toggle_q})
+      3'b000 : sample_ptr_increment = 2'b00;
+      3'b001 : sample_ptr_increment = 2'b01;
+      3'b01? : sample_ptr_increment = 2'b01;
+      3'b100 : sample_ptr_increment = 2'b01;
+      3'b101 : sample_ptr_increment = 2'b10;
+      3'b11? : sample_ptr_increment = 2'b10;
+     default : sample_ptr_increment = 'x;
+    endcase
+end
+
+assign sample_ptr_nxt   = next_sample ? sample_ptr_q + { {2{1'b0}}, sample_ptr_increment }
                                       : sample_ptr_q;
 
-assign gen_read_req = &sample_ptr_q & ~|count_q;
+assign gen_read_req = ((speed_ctl_q == 2'b00) &   sample_toggle_q & &sample_ptr_q // 0.5x speed, when last ptr is played twice
+                    | (speed_ctl_q == 2'b01) &  &sample_ptr_q                   // 1x   speed, when ptr is 0xFF
+                    | (speed_ctl_q == 2'b10) &  &sample_ptr_q                   // 1.5x speed, when ptr is 0xFF
+                    | (speed_ctl_q == 2'b11) &  (sample_ptr_q == 4'd14) )       // 2x speed, when ptr is at 14
+                       & ~|count_q; 
 
 
 // Binary coded mux to select sample data for PWM
@@ -112,5 +152,18 @@ assign rd_o     = rd_req_pulse_q;
 assign addr_o   = addr_q;
 assign sample_o = pwm_data;
 
+`ifdef FORMAL
+    reg f_past_valid = 0;
+    // start in reset
+    initial assume(reset);
+    always @(posedge clk) begin
+
+        f_past_valid <=1;
+
+        _counter_ptr_assert_: assert property (@(posedge clk) gen_read_req  |=> ~|sample_ptr_q);
+    end
+
+
+`endif
 
 endmodule

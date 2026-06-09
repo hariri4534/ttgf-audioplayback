@@ -98,6 +98,7 @@ localparam LINE_SIZE = 16;
     .clk            (clk),
     .rst_n          (rst_n),
     .data_i         (line),
+    .speed_ctl_i    ({ui_in[1], ui_in[0]}),
     .rd_en_i        (done_w_sck),
 
     .sample_valid_o (sample_valid),
