@@ -16,12 +16,12 @@ module playback_ctrl #(parameter LINE_SIZE=16) (
     output reg  [7:0]  sample_o   // 8-bit PCM sample to PWM
 );
 
-localparam ADDR_PAD = 24 - $clog2(LINE_SIZE);
+localparam ADDR_PAD = 24 - $clog2(LINE_SIZE) - 1;
 logic [LINE_SIZE*8-1:0] data_buf_q;
-logic [$clog2(LINE_SIZE)-1:0] addr_offset;
+logic [$clog2(LINE_SIZE):0] addr_offset;
 
 logic [1:0] speed_ctl_q;
-logic [2:0] sample_ptr_increment;
+logic [1:0] sample_ptr_increment;
 logic sample_toggle_q;
 logic [23:0] addr_q, addr_nxt;
 logic [7:0] count_q, count_nxt;
@@ -103,12 +103,12 @@ end
 
 assign sample_ptr_nxt   = next_sample ? sample_ptr_q + { {2{1'b0}}, sample_ptr_increment }
                                       : sample_ptr_q;
-
+//TODO: align gen_read_req with QSPI cycles to make sure PWM output stays the same until 255
 assign gen_read_req = ((speed_ctl_q == 2'b00) &   sample_toggle_q & &sample_ptr_q // 0.5x speed, when last ptr is played twice
                     | (speed_ctl_q == 2'b01) &  &sample_ptr_q                   // 1x   speed, when ptr is 0xFF
                     | (speed_ctl_q == 2'b10) &  &sample_ptr_q                   // 1.5x speed, when ptr is 0xFF
                     | (speed_ctl_q == 2'b11) &  (sample_ptr_q == 4'd14) )       // 2x speed, when ptr is at 14
-                       & ~|count_q; 
+                       & (count_q == 8'd162); 
 
 
 // Binary coded mux to select sample data for PWM
@@ -141,11 +141,10 @@ always_ff @(posedge clk) begin
     end
 end
 
-assign addr_offset[$clog2(LINE_SIZE)-1]     = 1'b1;
-assign addr_offset[$clog2(LINE_SIZE)-2:0]   = '0;
+assign addr_offset[4]     = 1'b1;
+assign addr_offset[3:0]   = 4'b0000;
 assign addr_nxt = rd_en_q ? addr_q + { {ADDR_PAD{1'b0}}, addr_offset }
                           : addr_q;
-
 
 assign sample_valid_o = start_count_q;
 assign rd_o     = rd_req_pulse_q;

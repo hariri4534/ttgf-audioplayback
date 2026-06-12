@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
-[*] Sun Jun  7 11:36:06 2026
+[*] Fri Jun 12 09:58:43 2026
 [*]
 [dumpfile] "/foss/designs/ttgf-audioplayback/test/tb.vcd"
-[dumpfile_mtime] "Sun Jun  7 11:29:42 2026"
-[dumpfile_size] 523336
+[dumpfile_mtime] "Fri Jun 12 09:57:57 2026"
+[dumpfile_size] 906615
 [savefile] "/foss/designs/ttgf-audioplayback/test/tb.gtkw"
-[timestart] 42083700
+[timestart] 202003700
 [size] 1374 600
 [pos] 0 207
-*-17.000000 42340000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+*-17.000000 202260000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 [markername] AA
 [markername] BB
 [markername] CC
@@ -62,7 +62,7 @@ tb.user_project.u_playback.sample_o[7:0]
 @28
 tb.user_project.u_playback.gen_read_req
 tb.user_project.u_playback.sample_toggle_q
-@22
+@25
 tb.user_project.u_playback.count_q[7:0]
 @c00022
 tb.user_project.u_playback.sample_ptr_q[3:0]
@@ -106,7 +106,6 @@ tb.user_project.u_playback.addr_q[23:0]
 -group_end
 @28
 tb.user_project.u_playback.next_sample
-@29
 tb.user_project.u_playback.sample_ptr_increment[2:0]
 @200
 -qspi controller

@@ -28,7 +28,7 @@ module pwm (
   end
 
   assign count_d = (count_q == 8'hfe) ? {8{1'b0}} : count_q + 1'b1;
-  assign pwm_d   = (count_q < sample_i);
+  assign pwm_d   = (count_d < sample_i);
 
   assign pwm_o = pwm_q;
 

@@ -142,12 +142,19 @@ async def assert_gen_read_req_to_rd_o(dut):
             if dut.rst_n.value == 1:
                 assert playback.rd_o.value == 1, f"Assertion failed: rd_o is {playback.rd_o.value} (expected 1) in the cycle after gen_read_req was high"
 
+async def toggle_speed(dut):
+    while True:
+        await ClockCycles(dut.clk, 100)
+        dut.ui_in.value = random.randint(0,3)
+        dut._log.info(f"playback speed changed to {dut.ui_in.value}")
+
 @cocotb.test()
 async def test_qspi(dut):
     dut._log.info("Start QSPI Simulation Test")
 
     # Start assertion checker
     cocotb.start_soon(assert_gen_read_req_to_rd_o(dut))
+    cocotb.start_soon(toggle_speed(dut))
 
     # 50 MHz clock
     clock = Clock(dut.clk, 20, units="ns")
@@ -160,7 +167,7 @@ async def test_qspi(dut):
 
     # Initialize inputs
     dut.ena.value = 1
-    dut.ui_in.value = random.randint(0,0)
+    dut.ui_in.value = 3
     dut._log.info(f"playback speed value is {dut.ui_in.value}")
     dut.uio_in.value = 0
     dut.rst_n.value = 0
