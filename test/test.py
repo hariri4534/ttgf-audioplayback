@@ -44,7 +44,7 @@ class QSPIFlash:
                 cmd = 0
                 for i in range(8):
                     await RisingEdge(self.sck)
-                    cmd = (cmd << 1) | self.sd0.value.integer
+                    cmd = (cmd << 1) | self.sd0.value
                 self.log.info(f"Flash: Command 0x{cmd:02X} received")
             else:
                 self.log.info(f"Flash: Skip command loop and go straight to address")
